@@ -10,6 +10,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "OnlineSessionSettings.h"
 #include "OnlineSubsystem.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
@@ -17,7 +18,8 @@ DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 //////////////////////////////////////////////////////////////////////////
 // AMenuSystemCharacter
 
-AMenuSystemCharacter::AMenuSystemCharacter()
+AMenuSystemCharacter::AMenuSystemCharacter():
+	CreateSessionCompleteDelegate(FOnCreateSessionCompleteDelegate::CreateUObject(this,&ThisClass::OnCreateSessionComplete))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
@@ -53,10 +55,11 @@ AMenuSystemCharacter::AMenuSystemCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
- 
+	
 	IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
 	if(OnlineSubsystem)
 	{
+		// 获取OnlineSessionInterface
 		OnlineSessionInterface = OnlineSubsystem->GetSessionInterface();
 
 		if(GEngine)
@@ -64,7 +67,7 @@ AMenuSystemCharacter::AMenuSystemCharacter()
 			GEngine->AddOnScreenDebugMessage(
 				-1,
 				15.0f,
-				FColor::Red,
+				FColor::Blue,
 				FString::Printf(TEXT("Found subsystem %s") , *OnlineSubsystem->GetSubsystemName().ToString()));
 		}
 	}
@@ -143,4 +146,70 @@ void AMenuSystemCharacter::Look(const FInputActionValue& Value)
 		AddControllerYawInput(LookAxisVector.X);
 		AddControllerPitchInput(LookAxisVector.Y);
 	}
+}
+
+void AMenuSystemCharacter::CreateGameSession()
+{
+	// 检查OnlineSessionInterface是否可用
+	if(!OnlineSessionInterface.IsValid())
+	{
+		return;
+	}
+
+	//如果有已存在的会话，则删除它
+	auto ExistingSession = OnlineSessionInterface->GetNamedSession(NAME_GameSession);
+	if(ExistingSession != nullptr)
+	{
+		OnlineSessionInterface->DestroySession(NAME_GameSession);
+	}
+
+	// 会话创建请求完成时 触发的代理
+	OnlineSessionInterface->AddOnCreateSessionCompleteDelegate_Handle(CreateSessionCompleteDelegate);
+
+	// 创建会话设置
+	TSharedPtr<FOnlineSessionSettings> SessionSettings = MakeShareable(new FOnlineSessionSettings());
+	// 是否为局域网游戏, true为局域网游戏, false为联机游戏
+	SessionSettings->bIsLANMatch = false;
+	// 设置最大玩家数量
+	SessionSettings->NumPublicConnections = 4;
+	// 是否允许加入
+	SessionSettings->bAllowJoinInProgress = true;
+	// 是否使用Lobby, true为使用Lobby, false为不使用Lobby
+	SessionSettings->bUseLobbiesIfAvailable = true;
+	// 是否广播
+	SessionSettings->bShouldAdvertise = true;
+	// 使用Presence
+	SessionSettings->bUsesPresence = true;
+	
+	// 设置会话设置
+	const ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+	OnlineSessionInterface->CreateSession(*LocalPlayer->GetPreferredUniqueNetId(), NAME_GameSession, *SessionSettings);
+	
+}
+
+void AMenuSystemCharacter::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
+{
+	if(bWasSuccessful)
+	{
+		if(GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				15.0f,
+				FColor::Blue,
+				FString::Printf(TEXT("Create session: %s") , *SessionName.ToString()));
+		}
+	}
+	else
+	{
+		if(GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				15.0f,
+				FColor::Red,
+				FString::Printf(TEXT("Failed to create session")));
+		}
+	}
+
 }

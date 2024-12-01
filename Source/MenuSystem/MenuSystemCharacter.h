@@ -73,6 +73,17 @@ public:
 
 public:
 	//指向Online Session interface的指针
-	TSharedPtr<class IOnlineSession,ESPMode::ThreadSafe> OnlineSessionInterface;
+	//TSharedPtr<class IOnlineSession,ESPMode::ThreadSafe> OnlineSessionInterface;
+	IOnlineSessionPtr OnlineSessionInterface;
+	
+protected:
+
+	UFUNCTION(BlueprintCallable)
+	void CreateGameSession();
+
+	void OnCreateSessionComplete(FName SessionName,bool bWasSuccessful);
+
+private:
+	FOnCreateSessionCompleteDelegate CreateSessionCompleteDelegate;
 };
 
